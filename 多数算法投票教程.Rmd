@@ -1,0 +1,385 @@
+---
+title: "多数算法教程"
+author: "Xwyturbo"
+date: "2022-10-22"
+output:
+  html_document:
+    toc: yes
+    df_print: paged
+---
+
+#  0.数据的预处理
+
+加载R包，读取李阁村数据，查看李阁村变量：code是用来确定院落影像空间对应关系的唯一指标；绿视率，即院落绿色植被所占的比重；太阳能有无，即院落内有太阳能热水器，值为1，反之，值为0；居住表示院落实际有无人居住：
+
+```{r}
+  library(tidyverse)
+  library(readxl)
+  library(readr)
+  library(writexl)
+  library(ggpubr)
+  library(eoffice)
+  lg <- read.csv("c:\\xwy_workplace\\R_projects\\lg.csv")
+  str(lg)
+  #write_xlsx(lg,"c:\\xwy_workplace\\R_projects\\lg.xlsx")
+  table(院落居住实际 = lg$居住,太阳能识别结果 = lg$太阳能有无)
+  lg$院落实际 <- lg$居住
+  lg$院落实际[lg$院落实际 == '0']<- '无人居住'
+  lg$院落实际[lg$院落实际 == '1']<- '有人居住'
+    
+  fig1 <- ggboxplot(lg,x = "院落实际",y = "绿视率",
+                    color = "院落实际",add = "jitter") + 
+    stat_compare_means() +
+    labs(title = "图1 院落绿视率与实际居住箱线图",
+         subtitle = "添加Wilcoxon秩和检验")
+  fig1
+  
+  
+  fig2 <- ggboxplot(lg,x = "院落实际",y = "绿视率",
+                    color = "院落实际",add = "jitter") + 
+    stat_compare_means(method = "t.test",label = "p.signif")+
+    labs(title = "图2 院落绿视率与实际居住箱线图",
+         subtitle = "添加t.test检验，显著性标签")
+  fig2
+  
+  #topptx(fig2,"c:\\xwy_workplace\\R_projects\\院落绿视率与实际居住箱线图.pptx")
+```
+
+
+#  1.决策树算法
+##  1.1 加载对应R包、李阁村原始数据，切分数据集，搭建决策树模型。
+
+```{r}
+  library(tidyverse)
+  library(readxl)
+  library(MASS)
+  library(rpart)
+  library(rpart.plot)
+  li_ge <- read_xlsx("c:\\xwy_workplace\\R_projects\\li_ge.xlsx")
+  str(li_ge)
+  #查看加载的数据。
+  
+  set.seed(4)
+  s = sample(376,300)
+  trainset = li_ge[s,2:4]
+  testset = li_ge[-s,2:4]
+  #数据集切分，300个训练，76阁测试。
+  
+  fl_tree_trainset <- trainset
+  fl_tree_testset <- testset
+  fl_tree_trainset$居住[fl_tree_trainset$居住 == '0']<- '无人居住'
+  fl_tree_trainset$居住[fl_tree_trainset$居住 == '1']<- '有人居住'
+  fl_tree_testset$居住[fl_tree_testset$居住 == '0']<- '无人居住'
+  fl_tree_testset$居住[fl_tree_testset$居住 == '1']<- '有人居住'
+  #转换为符合决策数模型的数据格式。
+  
+  tree_fit = rpart(居住~.,data = fl_tree_trainset)
+  summary(tree_fit)
+  #更详细的决策树分裂规则。
+  rpart.plot(tree_fit,type = 2)
+  #决策树模型可视化：
+  #百分数表示抽样的样本占全体的量，
+  #小数表示抽样样本中有人居住的比重。
+
+```
+
+
+##  1.2 决策树模型评价，包括对训练集：300个；测试集：76个的评价。
+
+```{r}
+  tree_pre_train = predict(tree_fit,fl_tree_trainset,type = "class")
+  tree_t_train = table(tree_pre_train,fl_tree_trainset$居住)
+  tree_t_train#查看生成的训练集混淆矩阵
+  
+  (tree_acc_train = sum(diag(tree_t_train))/nrow(trainset))
+  #训练集准确率
+  (tree_rec_train = tree_t_train[1,1]/(tree_t_train[1,1]+tree_t_train[1,2]))
+  #训练集召回率
+  (tree_sen_train = tree_t_train[1,1]/(tree_t_train[1,1]+tree_t_train[2,1]))
+  #训练集灵敏度
+  (tree_spe_train = tree_t_train[2,2]/(tree_t_train[1,2]+tree_t_train[2,2]))
+  #训练集特异度
+  library(vcd)
+  Kappa(tree_t_train)->a
+  k1<-as.data.frame(a[[1]])
+  k1<-k1[1,1]
+  k1#训练集科恩卡帕系数
+  
+  tree_pre_test = predict(tree_fit,fl_tree_testset,type = "class")
+  tree_t_test = table(tree_pre_test,fl_tree_testset$居住)
+  tree_t_test#查看生成的测试集混淆矩阵
+  
+  (tree_acc_test = sum(diag(tree_t_test))/nrow(testset))
+  #测试集准确率
+  (tree_rec_test = tree_t_test[1,1]/(tree_t_test[1,1]+tree_t_test[1,2]))
+  #测试集召回率
+  (tree_sen_test = tree_t_test[1,1]/(tree_t_test[1,1]+tree_t_test[2,1]))
+  #测试集灵敏度
+  (tree_spe_test = tree_t_test[2,2]/(tree_t_test[1,2]+tree_t_test[2,2]))
+  #测试集特异度
+  library(vcd)
+  Kappa(tree_t_test)->a2
+  k11<-as.data.frame(a2[[1]])
+  k11<-k11[1,1]
+  k11#测试集科恩卡帕系数
+  
+```
+
+#  2.二元逻辑回归算法
+##  2.1 加载对应R包、李阁村数据，保证数据集的切分与前者一致。
+
+```{r}
+  library(forestmodel)
+  logistic_trainset<-trainset
+  logistic_testset<-testset
+  str(logistic_trainset)
+  #查看加载的训练集数据。
+  str(logistic_testset)
+  #查看加载的测试集数据。
+  options(scipen = 200)
+  #200以内的数，取消科学计数法。
+  logistic_trainset$居住<-as.factor(logistic_trainset$居住)
+  logistic_testset$居住<-as.factor(logistic_testset$居住)
+  #转化为符合二元逻辑回归的数据格式。
+  logistic_fit<-glm(居住~.,data = logistic_trainset,family = binomial)
+  summary(logistic_fit)
+  ##查看logistic_fit，发现变量均通过假设检验对应方程。
+  forest_model(logistic_fit)
+  #基于回归模型的结果绘制森林图。
+```
+
+所得回归方程中的常数项为1.4，绿视率x1的系数为-6.3，太阳能有无x2为1.8完整的回归方程为：
+$$ Y = exp(1.4-6.3x1+1.8x2)/(1+exp(1.4 -6.3x1+1.8x2))$$
+
+##  2.2 二元逻辑回归模型评价，包括对训练集：300个；测试集：76个的评价。
+
+```{r}
+  logistic_prob_train<-predict(logistic_fit,logistic_trainset,type = "response")
+  logistic_pred_train<-logistic_prob_train>0.5
+  logistic_table_train<-table(Predicted=logistic_pred_train,Actual=logistic_trainset$居住)
+  logistic_table_train#查看生成的训练集混淆矩阵
+  
+  (log_acc_train = sum(diag(logistic_table_train))/nrow(trainset))
+  #训练集准确率
+  (log_rec_train = logistic_table_train[1,1]/(logistic_table_train[1,1]+logistic_table_train[1,2]))
+  #训练集召回率
+  (log_sen_train = logistic_table_train[1,1]/(logistic_table_train[1,1]+logistic_table_train[2,1]))
+  #训练集灵敏度
+  (log_spe_train = logistic_table_train[2,2]/(logistic_table_train[1,2]+logistic_table_train[2,2]))
+  #训练集特异度
+  library(vcd)
+  Kappa(logistic_table_train)->b
+  k2<-as.data.frame(b[[1]])
+  k2<-k2[1,1]
+  k2#训练集科恩卡帕系数
+  
+  logistic_prob_test<-predict(logistic_fit,type = "response",newdata = logistic_testset)
+  logistic_pred_test<-logistic_prob_test>0.5
+  logistic_table_test<-table(Predicted=logistic_pred_test,Actual=logistic_testset$居住)#查看生成的测试集混淆矩阵
+  
+  (log_acc_test = sum(diag(logistic_table_test))/nrow(testset))
+  #测试集准确率
+  (log_rec_test = logistic_table_test[1,1]/(logistic_table_test[1,1]+logistic_table_test[1,2]))
+  #测试集召回率
+  (log_sen_test = logistic_table_test[1,1]/(logistic_table_test[1,1]+logistic_table_test[2,1]))
+  #测试集灵敏度
+  (log_spe_test = logistic_table_test[2,2]/(logistic_table_test[1,2]+logistic_table_test[2,2]))
+  #测试集特异度
+  library(vcd)
+  Kappa(tree_t_test)->b2
+  k22<-as.data.frame(b2[[1]])
+  k22<-k22[1,1]
+  k22#测试集科恩卡帕系数
+```
+
+
+#  3.随机森林算法
+
+##  3.1 加载对应R包、李阁村数据，保证数据集的切分与前者一致。
+
+```{r}
+  library(forestmodel)
+  library(randomForest)
+  rf_trainset<-trainset
+  rf_testset<-testset
+  str(rf_trainset)
+  #查看加载的训练集数据。
+  str(rf_testset)
+  #查看加载的测试集数据。
+  options(scipen = 200)
+  #200以内的数，取消科学计数法。
+  rf_trainset$居住<-as.factor(rf_trainset$居住)
+  rf_testset$居住<-as.factor(rf_testset$居住)
+  rf_fit <- randomForest(formula = 居住~.,data =rf_trainset,mtry=1,
+                         importance = TRUE,ntree=15000)
+  rf_fit
+  varImpPlot(rf_fit,main = 01)
+  #partialPlot(rf_fit,rf_trainset,x.var = 绿视率)
+```
+
+##  3.2 随机森林模型评价，包括对包括对训练集：300个；测试集：76个的评价。
+
+```{r}
+  rf_trained <- predict(rf_fit,newdata = rf_trainset)
+  rf_table_train <- table(Predicted=rf_trained, Actual=rf_trainset$居住)
+  rf_table_train#查看生成的训练集混淆矩阵
+  
+  (rf_acc_train = sum(diag(rf_table_train))/nrow(rf_trainset))
+  #训练集准确率
+  (rf_rec_train = rf_table_train[1,1]/(rf_table_train[1,1]+rf_table_train[1,2]))
+  #训练集召回率
+  (rf_sen_train = rf_table_train[1,1]/(rf_table_train[1,1]+rf_table_train[2,1]))
+  #训练集灵敏度
+  (rf_spe_train = rf_table_train[2,2]/(rf_table_train[1,2]+rf_table_train[2,2]))
+  #训练集特异度
+  library(vcd)
+  Kappa(rf_table_train)->c
+  k3<-as.data.frame(c[[1]])
+  k3<-k3[1,1]
+  k3#训练集科恩卡帕系数
+  
+  rf_pred <- predict(rf_fit,newdata = rf_testset)
+  rf_table_test <- table(rf_pred,rf_testset$居住)#查看生成的测试集混淆矩阵
+  
+  (rf_acc_test = sum(diag(rf_table_test ))/nrow(rf_testset))
+  #测试集准确率
+  (rf_rec_test = rf_table_test[1,1]/(rf_table_test[1,1]+rf_table_test[1,2]))
+  #测试集召回率
+  (rf_sen_test = rf_table_test[1,1]/(rf_table_test[1,1]+rf_table_test[2,1]))
+  #测试集灵敏度
+  (rf_spe_test = rf_table_test[2,2]/(rf_table_test[1,2]+rf_table_test[2,2]))
+  #测试集特异度
+  library(vcd)
+  Kappa(rf_table_test)->c2
+  k33<-as.data.frame(c2[[1]])
+  k33<-k33[1,1]
+  k33#测试集科恩卡帕系数
+```
+
+
+#  4.支持向量机算法
+
+##  4.1 加载对应R包、李阁村数据，保证数据集的切分与前者一致。
+
+```{r}
+  library(tidyverse)
+  library(MASS)
+  library(margins)
+  library(e1071)
+  svm_trainset<-trainset
+  #查看加载的训练集数据。
+  svm_testset<-testset
+  #查看加载的测试集数据。
+  options(scipen = 200)
+  #200以内的数，取消科学计数法
+  svm_trainset$居住<-as.factor(svm_trainset$居住)
+  svm_testset$居住<-as.factor(svm_testset$居住)
+  svm_fit<-svm(居住~.,data = svm_trainset,kernel="linear",cost=1)
+  summary(svm_fit)
+```
+
+##  4.2 支持向量机模型评价，包括对包括对训练集：300个；测试集：76个的评价。
+
+```{r}
+  svm_pred_train<-predict(svm_fit,svm_trainset)
+  svm_table_train<-table(Predicted=svm_pred_train,Actual=svm_trainset$居住)
+  svm_table_train#查看生成的训练集混淆矩阵
+  
+  (svm_acc_train = sum(diag(rf_table_train))/nrow(rf_trainset))
+  #训练集准确率
+  (svm_rec_train = rf_table_train[1,1]/(rf_table_train[1,1]+rf_table_train[1,2]))
+  #训练集召回率
+  (svm_sen_train = rf_table_train[1,1]/(rf_table_train[1,1]+rf_table_train[2,1]))
+  #训练集灵敏度
+  (svm_spe_train = rf_table_train[2,2]/(rf_table_train[1,2]+rf_table_train[2,2]))
+  #训练集特异度
+  library(vcd)
+  Kappa(svm_table_train)->d
+  k4<-as.data.frame(d[[1]])
+  k4<-k4[1,1]
+  k4#训练集科恩卡帕系数
+  
+  svm_pred <- predict(svm_fit,newdata = svm_testset)
+  svm_table_test <- table(svm_pred,svm_testset$居住)#查看生成的测试集混淆矩阵
+  
+  (svm_acc_test = sum(diag(svm_table_test))/nrow(svm_testset))
+  #测试集准确率
+  (svm_rec_test = svm_table_test[1,1]/(svm_table_test[1,1]+svm_table_test[1,2]))
+  #测试集召回率
+  (svm_sen_test = svm_table_test[1,1]/(svm_table_test[1,1]+svm_table_test[2,1]))
+  #测试集灵敏度
+  (svm_spe_test = svm_table_test[2,2]/(svm_table_test[1,2]+svm_table_test[2,2]))
+  #测试集特异度
+  library(vcd)
+  Kappa(svm_table_test)->d2
+  k44<-as.data.frame(d2[[1]])
+  k44<-k44[1,1]
+  k44#测试集科恩卡帕系数
+  
+```
+
+
+#  5.神经网络算法
+
+##  5.1 加载对应R包、李阁村数据，保证数据集的切分与前者一致。
+
+```{r}
+  library(tidyverse)
+  library(MASS)
+  library(margins)
+  library(e1071)
+  library(neuralnet)
+  neural_trainset<-trainset
+  neural_testset<-testset
+  neural_trainset$居住<-as.factor(neural_trainset$居住)
+  neural_testset$居住<-as.factor(neural_testset$居住)
+  neural_fit<-neuralnet(居住~.,data = neural_trainset,hidden=10,linear.output=FALSE)
+  summary(neural_fit)
+```
+
+##  5.2 神经网络模型评价，包括对包括对训练集：300个；测试集：76个的评价。
+
+```{r}
+  neural_prob_train<-predict(neural_fit,neural_trainset)
+  neural_pred_train<-neural_prob_train>0.5
+  neural_table_train<-table(Predicted=neural_pred_train[,2],Actual=neural_trainset$居住)
+  neural_table_train#查看生成的训练集混淆矩阵
+  
+  (neural_acc_train = sum(diag(neural_table_train))/nrow(neural_trainset))
+  #训练集准确率
+  (neural_rec_train = neural_table_train[1,1]/(neural_table_train[1,1]+neural_table_train[1,2]))
+  #训练集召回率
+  (neural_sen_train = neural_table_train[1,1]/(neural_table_train[1,1]+neural_table_train[2,1]))
+  #训练集灵敏度
+  (neural_spe_train = neural_table_train[2,2]/(neural_table_train[1,2]+neural_table_train[2,2]))
+  #训练集特异度
+  library(vcd)
+  Kappa(neural_table_train)->e
+  k5<-as.data.frame(e[[1]])
+  k5<-k5[1,1]
+  k5#训练集科恩卡帕系数
+  
+  neural_prob_test<-predict(neural_fit,newdata = neural_testset)
+  neural_pred_test<-neural_prob_test>0.5
+  neural_table_test<-table(Predicted=neural_pred_test[,2],Actual=neural_testset$居住)
+  neural_table_test#查看生成的测试集混淆矩阵
+  
+  (neural_acc_test = sum(diag(neural_table_train))/nrow(neural_trainset))
+  #测试集集准确率
+  (neural_rec_test = neural_table_test[1,1]/(neural_table_test[1,1]+neural_table_test[1,2]))
+  #测试集召回率
+  (neural_sen_test = neural_table_test[1,1]/(neural_table_test[1,1]+neural_table_test[2,1]))
+  #测试集灵敏度
+  (neural_spe_test = neural_table_test[2,2]/(neural_table_test[1,2]+neural_table_test[2,2]))
+  #测试集特异度
+  library(vcd)
+  Kappa(neural_table_test)->e2
+  k55<-as.data.frame(e2[[1]])
+  k55<-k55[1,1]
+  k55#测试集科恩卡帕系数
+  
+```
+
+
+#  6.References:略。
+
