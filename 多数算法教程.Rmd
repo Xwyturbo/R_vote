@@ -10,7 +10,7 @@ output:
 
 #  0.数据的预处理
 
-加载R包，读取李阁村数据，查看李阁村变量：code是用来确定院落影像空间对应关系的唯一指标；绿视率，即院落绿色植被所占的比重；太阳能有无，即院落内有太阳能热水器，值为1，反之，值为0；居住表示院落实际有无人居住：
+加载R包，读取数据，查看变量：code是用来确定院落影像空间对应关系的唯一指标；绿视率，即院落绿色植被所占的比重；太阳能有无，即院落内有太阳能热水器，值为1，反之，值为0；居住表示院落实际有无人居住：
 
 ```{r}
   library(tidyverse)
@@ -47,7 +47,7 @@ output:
 
 
 #  1.决策树算法
-##  1.1 加载对应R包、李阁村原始数据，切分数据集，搭建决策树模型。
+##  1.1 加载对应R包、原始数据，切分数据集，搭建决策树模型。
 
 ```{r}
   library(tidyverse)
@@ -195,7 +195,7 @@ $$ Y = exp(1.4-6.3x1+1.8x2)/(1+exp(1.4 -6.3x1+1.8x2))$$
 
 #  3.随机森林算法
 
-##  3.1 加载对应R包、李阁村数据，保证数据集的切分与前者一致。
+##  3.1 加载对应R包、数据，保证数据集的切分与前者一致。
 
 ```{r}
   library(forestmodel)
@@ -259,7 +259,7 @@ $$ Y = exp(1.4-6.3x1+1.8x2)/(1+exp(1.4 -6.3x1+1.8x2))$$
 
 #  4.支持向量机算法
 
-##  4.1 加载对应R包、李阁村数据，保证数据集的切分与前者一致。
+##  4.1 加载对应R包、数据，保证数据集的切分与前者一致。
 
 ```{r}
   library(tidyverse)
@@ -321,7 +321,7 @@ $$ Y = exp(1.4-6.3x1+1.8x2)/(1+exp(1.4 -6.3x1+1.8x2))$$
 
 #  5.神经网络算法
 
-##  5.1 加载对应R包、李阁村数据，保证数据集的切分与前者一致。
+##  5.1 加载对应R包、数据，保证数据集的切分与前者一致。
 
 ```{r}
   library(tidyverse)
@@ -381,5 +381,58 @@ $$ Y = exp(1.4-6.3x1+1.8x2)/(1+exp(1.4 -6.3x1+1.8x2))$$
 ```
 
 
-#  6.References:略。
+
+
+#  6.汇总各个算法识别结果、统计指标。
+## 6.1 汇总各个算法的识别结果。
+
+```{r}
+  library(tidyverse)
+  result_train <- li_ge[s,] %>% 
+    mutate(类别 = "训练集",决策树 = tree_pre_train,
+           二元逻辑回归 = logistic_pred_train,  随机森林 = rf_trained,
+           支持向量机 = svm_pred_train,人工神经网络 = neural_pred_train[,2])
+  #str(result_train)
+  
+  result_test <- li_ge[-s,] %>% 
+    mutate(类别 = "测试集",决策树 = tree_pre_test,
+           二元逻辑回归 = logistic_pred_test,  随机森林 = rf_pred,
+           支持向量机 = svm_pred,人工神经网络 = neural_pred_test[,2])
+  #str(result_test)
+
+```
+
+
+##  6.2 汇总各个算法的评价指标。
+
+```{r}
+  library(tidyverse)
+  zhibiao_train <- tibble(算法=c("决策树","二元逻辑回归","随机森林",
+                                 "支持向量机","人工神经网络"),
+               准确率=c(tree_acc_train,log_acc_train,rf_acc_train,
+                     svm_acc_train,neural_acc_train),
+               召回率=c(tree_rec_train,log_rec_train,rf_rec_train,
+                     svm_rec_train,neural_rec_train),
+               灵敏度=c(tree_sen_train,log_sen_train,rf_sen_train,
+                     svm_sen_train,neural_sen_train),
+               特异度=c(tree_spe_train,log_spe_train,rf_spe_train,
+                     svm_spe_train,neural_spe_train),
+               Kappa系数=c(k1,k2,k3,k4,k5))
+  
+  zhibiao_test <- tibble(算法=c("决策树","二元逻辑回归","随机森林",
+                                 "支持向量机","人工神经网络"),
+               准确率=c(tree_acc_test,log_acc_test,rf_acc_test,
+                     svm_acc_test,neural_acc_test),
+               召回率=c(tree_rec_test,log_rec_test,rf_rec_test,
+                     svm_rec_test,neural_rec_test),
+               灵敏度=c(tree_sen_test,log_sen_test,rf_sen_test,
+                     svm_sen_test,neural_sen_test),
+               特异度=c(tree_spe_test,log_spe_test,rf_spe_test,
+                     svm_spe_test,neural_spe_test),
+               Kappa系数=c(k11,k22,k33,k44,k55))
+  zhibiao_train
+  zhibiao_test
+```
+
+#  7.References:  略。
 
